@@ -4,6 +4,7 @@ export interface Message {
   sender: "user" | "assistant";
   isHTML?: boolean;
   timestamp?: string;
+  toolUsed?: string;
 }
 
 export interface TerminalStatus {
@@ -14,8 +15,13 @@ export interface TerminalStatus {
     | "listening"
     | "recording"
     | "speaking"
+    | "thinking"
+    | "using_tools"
+    | "writing"
     | "processing"
     | "other";
+  icon?: string;
+  toolName?: string;
 }
 
 export interface CommandHistoryState {

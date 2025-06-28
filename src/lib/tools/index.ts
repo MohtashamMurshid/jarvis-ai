@@ -3,6 +3,7 @@ import { openai } from "@ai-sdk/openai";
 import { generateText } from "ai";
 import { z } from "zod";
 import { tool } from "ai";
+import creatorInfo from "../../../creator.json";
 
 interface SearchResult {
   title: string;
@@ -224,40 +225,16 @@ export const getCreatorInfo = tool({
   description: "Get information about the creator of the assistant.",
   parameters: z.object({}),
   execute: async () => {
-    return `The creator of the Jarvis Assistant is Mohtasham Murshid Madani. He is a Computer Science Engineer and founder of Smarttex.ai, a startup building AI-powered writing assistants with docx and tex support. Originally from Srinagar, Kashmir, he's currently based in Malaysia (Selangor) studying computer science.
+    return creatorInfo;
+  },
+});
 
-Key Background:
-- Email: mohtashammurshid@gmail.com
-- Education: Computer science student ( final year)
-- Personality: Practical, avoids buzzwords, direct and thoughtful
-
-Notable Projects:
-1. Smarttex.ai - Document generation and writing assistant for academic papers
-2. Bounty - Smart job-matching app using location and past orders (built with Expo + Clerk)
-3. Checkmate - AI misinformation detection platform (ImagineHack 2025 First Runner-Up)
-4. Bone fracture image classification using VGG16, ResNet-50, and custom CNN
-5. Markdown to DOCX converter
-
-Technical Stack:
-- Languages: Python, Java, JavaScript, Kotlin, Swift, SQL
-- Frontend: React, Next.js, TailwindCSS, NextUI, Framer Motion
-- Backend: Flask, Convex, Clerk
-- Mobile: Expo (React Native), Android Studio, SwiftUI
-- ML/AI: CNNs, PyTorch, Keras, Scikit-learn
-- Design: Figma, LottieFiles, AfterEffects, Blender
-
-Web Dev Preferences:
-- Dark mode UIs with clean, modern design
-- Bento-style layouts with 70vw container width
-- Futuristic buttons and professional fonts (ShadCN inspired)
-- Framer Motion animations
-
-Current Focus:
-- Academic work: Writing structured reports, preparing to publish "Privacy-Aware LLMs: A Scalable Open-Source Framework"
-- Learning about tools like Cursor and LLMs for local code changes
-- Preparing for software engineering internship interviews
-- Building useful, practical technology that saves time
-
-Mohtasham values smart, clean technology and prefers practical solutions over buzzwords.`;
+export const toggleTTS = tool({
+  description: "Toggle the TTS on or off.",
+  parameters: z.object({
+    toggle: z.boolean().describe("The toggle to set the TTS on or off."),
+  }),
+  execute: async ({ toggle }) => {
+    return `TTS is now ${toggle ? "on" : "off"}.`;
   },
 });

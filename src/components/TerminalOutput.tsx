@@ -1,11 +1,13 @@
 import { useRef, useEffect } from "react";
-import { Message, SpeechState } from "../types/terminal";
+import { Message, SpeechState, TerminalStatus } from "../types/terminal";
+import { Ear, Loader2, Mic, Pencil, Speaker, Wrench } from "lucide-react";
 
 interface AIMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
   createdAt?: Date;
+  toolUsed?: string;
 }
 
 interface TerminalOutputProps {
@@ -13,28 +15,96 @@ interface TerminalOutputProps {
   aiMessages: AIMessage[];
   isLoading: boolean;
   speechState: SpeechState;
+  status: TerminalStatus;
 }
+
+const ProcessingIndicator = ({ status }: { status: TerminalStatus }) => {
+  const getIcon = () => {
+    switch (status.type) {
+      case "thinking":
+        return <Loader2 className="animate-spin" />;
+      case "using_tools":
+        return <Wrench className="animate-spin" />;
+      case "writing":
+        return <Pencil className="animate-spin" />;
+      case "processing":
+        return <Loader2 className="animate-spin" />;
+      case "speaking":
+        return <Speaker className="animate-spin" />;
+      case "listening":
+        return <Ear className="animate-spin" />;
+      case "recording":
+        return <Mic className="animate-spin" />;
+      default:
+        return <Loader2 className="animate-spin" />;
+    }
+  };
+
+  const getColor = () => {
+    switch (status.type) {
+      case "thinking":
+        return "text-purple-400";
+      case "using_tools":
+        return "text-yellow-400";
+      case "writing":
+        return "text-green-400";
+      case "processing":
+        return "text-blue-400";
+      case "speaking":
+        return "text-cyan-400";
+      case "listening":
+      case "recording":
+        return "text-red-400";
+      default:
+        return "text-gray-400";
+    }
+  };
+
+  return (
+    <div className="flex items-start mb-2">
+      <div className="w-8 h-8 flex-shrink-0 mr-2 flex items-center justify-center">
+        <span className={`text-2xl ${getColor()}`}>
+          {status.icon || getIcon()}
+        </span>
+      </div>
+      <div>
+        <div className="text-sm text-green-300">
+          <span className="font-bold">JARVIS</span>
+        </div>
+        <div className={`whitespace-pre-wrap ${getColor()} animate-pulse mt-1`}>
+          {status.text}...
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export function TerminalOutput({
   messages,
   aiMessages,
   isLoading,
   speechState,
+  status,
 }: TerminalOutputProps) {
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop =
-        chatContainerRef.current.scrollHeight;
+      const scrollContainer = chatContainerRef.current;
+      const isAtBottom =
+        scrollContainer.scrollHeight - scrollContainer.scrollTop <=
+        scrollContainer.clientHeight + 100;
+
+      if (isAtBottom) {
+        setTimeout(() => {
+          scrollContainer.scrollTo({
+            top: scrollContainer.scrollHeight,
+            behavior: "smooth",
+          });
+        }, 100);
+      }
     }
-  }, [
-    messages,
-    aiMessages,
-    speechState.isListening,
-    speechState.isRecording,
-    speechState.isSpeaking,
-  ]);
+  }, [messages, aiMessages, speechState, status]);
 
   const combinedMessages = [
     ...messages,
@@ -46,6 +116,7 @@ export function TerminalOutput({
         sender: m.role,
         timestamp: (m.createdAt || new Date()).toLocaleTimeString(),
         isHTML: false,
+        toolUsed: m.toolUsed,
       })),
   ].sort((a, b) => {
     const aDate = new Date(a.timestamp || 0).getTime();
@@ -56,10 +127,7 @@ export function TerminalOutput({
   });
 
   return (
-    <div
-      ref={chatContainerRef}
-      className="h-[calc(100vh-180px)] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800"
-    >
+    <div ref={chatContainerRef} className="h-full overflow-y-auto pr-2 pb-4">
       {combinedMessages.map((msg, index) => (
         <div
           key={`${msg.id}-${index}`}
@@ -89,25 +157,7 @@ export function TerminalOutput({
           </div>
         </div>
       ))}
-      {isLoading && (
-        <div className="flex items-start mb-2">
-          <div className="w-8 h-8 flex-shrink-0 mr-2">
-            <img
-              src="/globe.svg"
-              alt="AI Globe"
-              className="w-full h-full animate-spin-slow"
-            />
-          </div>
-          <div>
-            <div className="text-sm text-green-300">
-              <span className="font-bold">JARVIS</span>
-            </div>
-            <div className="whitespace-pre-wrap text-green-400 animate-pulse">
-              Thinking...
-            </div>
-          </div>
-        </div>
-      )}
+      {isLoading && <ProcessingIndicator status={status} />}
       {(speechState.isListening || speechState.isRecording) && (
         <div className="text-purple-400 animate-pulse">
           <span className="text-gray-500 text-xs mr-2">

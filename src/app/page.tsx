@@ -53,12 +53,18 @@ export default function JarvisAssistant() {
             message.content &&
             message.content.trim().length > 0
           ) {
+            setStatus({
+              type: "speaking",
+              text: "Speaking response",
+              toolName: "text-to-speech",
+            });
             speak(message.content);
           }
         }, 100);
       } else {
         console.log("No valid message content to speak or TTS disabled");
       }
+      setStatus({ type: "ready", text: "READY" });
     },
   });
 
@@ -92,11 +98,16 @@ export default function JarvisAssistant() {
   const commandProcessor = new CommandProcessor({
     addMessage,
     clearTerminal: clearMessages,
-    setStatus: (text) =>
-      setStatus({
-        text,
-        type: text.toLowerCase().includes("error") ? "error" : "ready",
-      }),
+    setStatus: (newStatus) => {
+      if (typeof newStatus === "string") {
+        setStatus({
+          text: newStatus,
+          type: newStatus.toLowerCase().includes("error") ? "error" : "ready",
+        });
+      } else {
+        setStatus(newStatus);
+      }
+    },
     stopAllActivity,
     setIsTTSEnabled: () => {
       const newState = toggleTTS();
@@ -105,7 +116,14 @@ export default function JarvisAssistant() {
         "assistant"
       );
     },
-    append: (message) => append({ ...message, id: `local-${Date.now()}` }),
+    append: (message) => {
+      setStatus({
+        type: "thinking",
+        text: "Processing your request",
+        toolName: "chat",
+      });
+      append({ ...message, id: `local-${Date.now()}` });
+    },
   });
 
   const {
@@ -201,8 +219,8 @@ export default function JarvisAssistant() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-green-400 font-mono overflow-hidden">
-      <div className="container mx-auto px-4 py-2 max-w-4xl">
+    <div className="min-h-screen bg-black text-green-400 font-mono overflow-hidden relative">
+      <div className="container mx-auto px-4 py-2 max-w-4xl h-screen flex flex-col">
         <TerminalHeader
           status={status}
           speechState={speechState}
@@ -211,23 +229,28 @@ export default function JarvisAssistant() {
           onToggleTTS={toggleTTS}
         />
 
-        <TerminalOutput
-          messages={messages}
-          aiMessages={aiMessages as AIMessage[]}
-          isLoading={isLoading}
-          speechState={speechState}
-        />
+        <div className="flex-1 overflow-hidden relative">
+          <TerminalOutput
+            messages={messages}
+            aiMessages={aiMessages as AIMessage[]}
+            isLoading={isLoading}
+            speechState={speechState}
+            status={status}
+          />
+        </div>
 
-        <CommandInput
-          input={input}
-          historyIndex={historyIndex}
-          commandHistoryLength={commandHistory.length}
-          isLoading={isLoading}
-          onInputChange={handleInputChange}
-          onSendMessage={sendMessage}
-        />
+        <div className="sticky bottom-0 bg-black py-4 border-t border-gray-800 mt-2">
+          <CommandInput
+            input={input}
+            historyIndex={historyIndex}
+            commandHistoryLength={commandHistory.length}
+            isLoading={isLoading}
+            onInputChange={handleInputChange}
+            onSendMessage={sendMessage}
+          />
 
-        <TerminalFooter speechState={speechState} />
+          <TerminalFooter speechState={speechState} />
+        </div>
       </div>
 
       <style jsx>{`

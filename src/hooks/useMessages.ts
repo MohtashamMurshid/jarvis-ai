@@ -3,13 +3,21 @@ import { Message } from "../types/terminal";
 import { INITIAL_MESSAGE } from "../lib/constants";
 
 interface UseMessagesProps {
-  append?: (message: { role: "user" | "assistant"; content: string }) => void;
+  append?: (message: {
+    role: "user" | "assistant";
+    content: string;
+    toolUsed?: string;
+  }) => void;
 }
 
 export function useMessages({ append }: UseMessagesProps) {
   const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE]);
 
-  const addMessage = (content: string, sender: "user" | "assistant") => {
+  const addMessage = (
+    content: string,
+    sender: "user" | "assistant",
+    toolUsed?: string
+  ) => {
     if (sender === "assistant" || content.startsWith(">")) {
       setMessages((prev) => [
         ...prev,
@@ -19,6 +27,7 @@ export function useMessages({ append }: UseMessagesProps) {
           sender,
           timestamp: new Date().toLocaleTimeString(),
           isHTML: false,
+          toolUsed,
         },
       ]);
     } else {
@@ -26,6 +35,7 @@ export function useMessages({ append }: UseMessagesProps) {
         append({
           role: "user",
           content: content,
+          toolUsed,
         });
       }
     }
