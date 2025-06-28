@@ -107,7 +107,8 @@ export async function POST(request: Request) {
             error: "Unsupported audio format",
             fallback: true,
             message:
-              "Audio format not supported by Whisper, falling back to browser speech recognition",
+              "The audio format could not be processed by Whisper. Please try speaking more clearly or in a quieter environment. Falling back to browser recognition.",
+            details: whisperError.message,
           },
           { status: 200 }
         );
@@ -123,10 +124,14 @@ export async function POST(request: Request) {
         console.log("API error 400, falling back to browser recognition");
         return Response.json(
           {
-            error: "Whisper API error",
+            error: "Whisper transcription failed",
             fallback: true,
             message:
-              "Whisper API returned error 400, falling back to browser speech recognition",
+              "Could not transcribe the audio. This might be due to background noise, unclear speech, or very short duration. Falling back to browser recognition.",
+            details:
+              whisperError instanceof Error
+                ? whisperError.message
+                : "Unknown error",
           },
           { status: 200 }
         );
@@ -139,10 +144,11 @@ export async function POST(request: Request) {
     console.error("Transcription error:", error);
     return Response.json(
       {
-        error: "Failed to transcribe audio",
+        error: "Transcription failed",
         fallback: true,
         message:
-          "Whisper transcription failed, falling back to browser speech recognition",
+          "Could not transcribe the audio due to an unexpected error. This might be due to network issues or server problems. Falling back to browser recognition.",
+        details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 200 }
     );

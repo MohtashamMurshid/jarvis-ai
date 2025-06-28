@@ -201,9 +201,18 @@ export function useSpeechRecognition({
 
       const data = await response.json();
 
-      if (data.fallback) {
-        onError(data.message);
-        toggleBrowserListening();
+      if (data.error) {
+        console.error("Whisper transcription error:", data);
+        let errorMessage = data.message || "Transcription failed";
+        if (data.details) {
+          errorMessage += `\nDetails: ${data.details}`;
+        }
+        onError(`ERROR: ${errorMessage}`);
+
+        if (data.fallback) {
+          console.log("Falling back to browser recognition");
+          toggleBrowserListening();
+        }
         return;
       }
 

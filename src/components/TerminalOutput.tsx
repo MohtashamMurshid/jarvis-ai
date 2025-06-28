@@ -148,7 +148,7 @@ export function TerminalOutput({
           <div
             className={`whitespace-pre-wrap ${
               msg.sender === "user" ? "text-cyan-400" : "text-green-400"
-            }`}
+            } ${msg.content.startsWith("ERROR:") ? "text-red-400" : ""}`}
             dangerouslySetInnerHTML={
               msg.isHTML ? { __html: msg.content } : undefined
             }
