@@ -2,9 +2,13 @@ import { useRef, useState } from "react";
 
 interface UseTextToSpeechProps {
   onStatusChange: (status: string) => void;
+  authToken?: string | null;
 }
 
-export function useTextToSpeech({ onStatusChange }: UseTextToSpeechProps) {
+export function useTextToSpeech({
+  onStatusChange,
+  authToken,
+}: UseTextToSpeechProps) {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isTTSEnabled, setIsTTSEnabled] = useState(false);
   const synthesisRef = useRef<SpeechSynthesis | null>(null);
@@ -45,6 +49,7 @@ export function useTextToSpeech({ onStatusChange }: UseTextToSpeechProps) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...(authToken && { Authorization: `Bearer ${authToken}` }),
         },
         body: JSON.stringify({ text: cleanText }),
       });

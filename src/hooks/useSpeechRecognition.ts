@@ -5,12 +5,14 @@ interface UseSpeechRecognitionProps {
   onTranscript: (transcript: string) => void;
   onError: (error: string) => void;
   onStatusChange: (status: string) => void;
+  authToken?: string | null;
 }
 
 export function useSpeechRecognition({
   onTranscript,
   onError,
   onStatusChange,
+  authToken,
 }: UseSpeechRecognitionProps) {
   const [isListening, setIsListening] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -196,6 +198,9 @@ export function useSpeechRecognition({
 
       const response = await fetch("/api/transcribe", {
         method: "POST",
+        headers: {
+          ...(authToken && { Authorization: `Bearer ${authToken}` }),
+        },
         body: formData,
       });
 

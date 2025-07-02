@@ -6,8 +6,13 @@ import {
   searchTool,
   weatherTool,
 } from "../../../lib/tools";
+import { verifyAuth, createAuthResponse } from "../../../lib/auth";
 
 export async function POST(request: Request) {
+  // Check authentication
+  if (!verifyAuth(request)) {
+    return createAuthResponse();
+  }
   try {
     const { messages } = await request.json();
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Terminal } from "lucide-react";
 import { useChat } from "@ai-sdk/react";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
@@ -10,8 +10,12 @@ import { CommandProcessor } from "@/lib/commandProcessor";
 import { MessageList } from "@/components/MessageList";
 import { InputArea } from "@/components/InputArea";
 import { StatusOrb } from "@/components/StatusOrb";
+import { PasswordPrompt } from "@/components/PasswordPrompt";
 
 export default function JarvisTerminal() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authToken, setAuthToken] = useState<string | null>(null);
+
   const {
     status,
     messages,
@@ -33,6 +37,9 @@ export default function JarvisTerminal() {
     setMessages: setAiMessages,
   } = useChat({
     api: "/api/chat",
+    headers: {
+      Authorization: authToken ? `Bearer ${authToken}` : "",
+    },
     onFinish: (message) => {
       if (
         isTTSEnabled &&
@@ -54,6 +61,7 @@ export default function JarvisTerminal() {
           text,
           type: text.toLowerCase().includes("error") ? "error" : "speaking",
         }),
+      authToken,
     });
 
   const stopAllActivity = () => {
@@ -104,12 +112,49 @@ export default function JarvisTerminal() {
           text,
           type: text.toLowerCase().includes("error") ? "error" : "processing",
         }),
+      authToken,
     });
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, [setCurrentTime]);
+
+  // Check for existing authentication token on component mount
+  useEffect(() => {
+    const storedToken = localStorage.getItem("jarvis_token");
+    if (storedToken) {
+      // Verify token is still valid (basic check)
+      try {
+        const decoded = Buffer.from(storedToken, "base64").toString();
+        const timestampMatch = decoded.match(/jarvis_session_(\d+)_/);
+
+        if (timestampMatch) {
+          const tokenTime = parseInt(timestampMatch[1]);
+          const now = Date.now();
+          const twentyFourHours = 24 * 60 * 60 * 1000;
+
+          if (now - tokenTime < twentyFourHours) {
+            setAuthToken(storedToken);
+            setIsAuthenticated(true);
+            return;
+          }
+        }
+      } catch {
+        // Token is invalid
+      }
+
+      // Remove invalid token
+      localStorage.removeItem("jarvis_token");
+    }
+  }, []);
+
+  const handleAuthenticated = (token: string) => {
+    setAuthToken(token);
+    setIsAuthenticated(true);
+    addMessage("🔓 Access granted. Welcome to JARVIS Terminal.", "jarvis");
+    updateStatus({ type: "ready", text: "AUTHENTICATED" });
+  };
 
   const handleSendMessage = async () => {
     const message = input.trim();
@@ -151,6 +196,16 @@ export default function JarvisTerminal() {
       startWhisperRecording();
     }
   };
+
+  // Show password prompt if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <PasswordPrompt
+        onAuthenticated={handleAuthenticated}
+        currentTime={currentTime}
+      />
+    );
+  }
 
   return (
     <div className="max-h-screen bg-black text-green-400 flex flex-col items-center justify-center p-14 relative overflow-hidden font-mono">

@@ -1,10 +1,15 @@
 import OpenAI from "openai";
+import { verifyAuth, createAuthResponse } from "../../../lib/auth";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
 export async function POST(request: Request) {
+  // Check authentication
+  if (!verifyAuth(request)) {
+    return createAuthResponse();
+  }
   try {
     const { text } = await request.json();
 
