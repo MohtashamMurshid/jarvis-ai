@@ -1,31 +1,28 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
+import { Terminal } from "lucide-react";
 import { useChat } from "@ai-sdk/react";
-import { TerminalHeader } from "../components/TerminalHeader";
-import { TerminalOutput } from "../components/TerminalOutput";
-import { CommandInput } from "../components/CommandInput";
-import { TerminalFooter } from "../components/TerminalFooter";
-import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
-import { useTextToSpeech } from "../hooks/useTextToSpeech";
-import { useCommandHistory } from "../hooks/useCommandHistory";
-import { useMessages } from "../hooks/useMessages";
-import { CommandProcessor } from "../lib/commandProcessor";
-import type { TerminalStatus } from "../types/terminal";
+import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
+import { useTextToSpeech } from "@/hooks/useTextToSpeech";
+import { useTerminalState } from "@/hooks/useTerminalState";
+import { CommandProcessor } from "@/lib/commandProcessor";
+import { MessageList } from "@/components/MessageList";
+import { InputArea } from "@/components/InputArea";
+import { StatusOrb } from "@/components/StatusOrb";
 
-interface AIMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  createdAt?: Date;
-}
-
-export default function JarvisAssistant() {
-  const [status, setStatus] = useState<TerminalStatus>({
-    text: "READY",
-    type: "ready",
-  });
-  const [isSpacebarPressed, setIsSpacebarPressed] = useState(false);
+export default function JarvisTerminal() {
+  const {
+    status,
+    messages,
+    currentTime,
+    setCurrentTime,
+    addMessage,
+    clearMessages,
+    updateStatus,
+    addToHistory,
+    navigateHistory,
+  } = useTerminalState();
 
   const {
     messages: aiMessages,
@@ -33,6 +30,7 @@ export default function JarvisAssistant() {
     handleInputChange,
     isLoading,
     append,
+    setMessages: setAiMessages,
   } = useChat({
     api: "/api/chat",
     onFinish: (message) => {
@@ -43,47 +41,16 @@ export default function JarvisAssistant() {
         typeof message.content === "string" &&
         message.content.trim().length > 0
       ) {
-        console.log(
-          "AI message finished, attempting to speak:",
-          message.content.slice(0, 100) + "..."
-        );
-        setTimeout(() => {
-          if (
-            isTTSEnabled &&
-            message.content &&
-            message.content.trim().length > 0
-          ) {
-            setStatus({
-              type: "speaking",
-              text: "Speaking response",
-              toolName: "text-to-speech",
-            });
-            speak(message.content);
-          }
-        }, 100);
-      } else {
-        console.log("No valid message content to speak or TTS disabled");
+        speak(message.content);
       }
-      setStatus({ type: "ready", text: "READY" });
+      updateStatus({ type: "ready", text: "READY" });
     },
   });
-
-  const { messages, addMessage, clearMessages } = useMessages({
-    append: (message) => append({ ...message, id: `local-${Date.now()}` }),
-  });
-
-  const { commandHistory, historyIndex, addToHistory, navigateHistory } =
-    useCommandHistory({
-      onInputChange: (value) =>
-        handleInputChange({
-          target: { value },
-        } as React.ChangeEvent<HTMLInputElement>),
-    });
 
   const { isSpeaking, isTTSEnabled, speak, stopSpeaking, toggleTTS } =
     useTextToSpeech({
       onStatusChange: (text) =>
-        setStatus({
+        updateStatus({
           text,
           type: text.toLowerCase().includes("error") ? "error" : "speaking",
         }),
@@ -91,33 +58,27 @@ export default function JarvisAssistant() {
 
   const stopAllActivity = () => {
     stopSpeaking();
-    setIsSpacebarPressed(false);
-    setStatus({ text: "READY", type: "ready" });
+    updateStatus({ text: "READY", type: "ready" });
   };
 
   const commandProcessor = new CommandProcessor({
-    addMessage,
-    clearTerminal: clearMessages,
-    setStatus: (newStatus) => {
-      if (typeof newStatus === "string") {
-        setStatus({
-          text: newStatus,
-          type: newStatus.toLowerCase().includes("error") ? "error" : "ready",
-        });
-      } else {
-        setStatus(newStatus);
-      }
+    addMessage: (content, sender) =>
+      addMessage(content, sender === "user" ? "user" : "jarvis"),
+    clearTerminal: () => {
+      clearMessages();
+      setAiMessages([]);
     },
+    setStatus: updateStatus,
     stopAllActivity,
     setIsTTSEnabled: () => {
       const newState = toggleTTS();
       addMessage(
         `🔊 Text-to-Speech ${newState ? "enabled" : "disabled"}`,
-        "assistant"
+        "jarvis"
       );
     },
     append: (message) => {
-      setStatus({
+      updateStatus({
         type: "thinking",
         text: "Processing your request",
         toolName: "chat",
@@ -126,148 +87,132 @@ export default function JarvisAssistant() {
     },
   });
 
-  const {
-    isListening,
-    isRecording,
-    startWhisperRecording,
-    stopWhisperRecording,
-  } = useSpeechRecognition({
-    onTranscript: (transcript) => {
-      handleInputChange({
-        target: { value: "" },
-      } as React.ChangeEvent<HTMLInputElement>);
-      setStatus({ text: `VOICE: ${transcript}`, type: "processing" });
-      addMessage(`> ${transcript}`, "user");
-      addToHistory(transcript);
-      commandProcessor.process(transcript);
-    },
-    onError: (error) => setStatus({ text: error, type: "error" }),
-    onStatusChange: (text) =>
-      setStatus({
-        text,
-        type: text.toLowerCase().includes("error") ? "error" : "processing",
-      }),
-  });
+  const { isRecording, startWhisperRecording, stopWhisperRecording } =
+    useSpeechRecognition({
+      onTranscript: (transcript) => {
+        handleInputChange({
+          target: { value: "" },
+        } as React.ChangeEvent<HTMLInputElement>);
+        updateStatus({ text: `VOICE: ${transcript}`, type: "processing" });
+        addMessage(`> ${transcript}`, "user");
+        addToHistory(transcript);
+        commandProcessor.process(transcript);
+      },
+      onError: (error) => updateStatus({ text: error, type: "error" }),
+      onStatusChange: (text) =>
+        updateStatus({
+          text,
+          type: text.toLowerCase().includes("error") ? "error" : "processing",
+        }),
+    });
 
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (
-        event.code === "Space" &&
-        !isSpacebarPressed &&
-        document.activeElement?.tagName !== "INPUT"
-      ) {
-        event.preventDefault();
-        setIsSpacebarPressed(true);
-        startWhisperRecording();
-      }
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, [setCurrentTime]);
 
-      if (event.code === "Escape") {
-        event.preventDefault();
-        stopAllActivity();
-      }
-
-      if (document.activeElement?.tagName === "INPUT") {
-        if (event.code === "ArrowUp") {
-          event.preventDefault();
-          navigateHistory("up");
-        } else if (event.code === "ArrowDown") {
-          event.preventDefault();
-          navigateHistory("down");
-        }
-      }
-
-      if (event.ctrlKey && event.code === "KeyL") {
-        event.preventDefault();
-        clearMessages();
-      }
-    };
-
-    const handleKeyUp = (event: KeyboardEvent) => {
-      if (event.code === "Space" && isSpacebarPressed) {
-        event.preventDefault();
-        setIsSpacebarPressed(false);
-        stopWhisperRecording();
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    document.addEventListener("keyup", handleKeyUp);
-
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      document.removeEventListener("keyup", handleKeyUp);
-    };
-  }, [isSpacebarPressed, commandHistory, historyIndex]);
-
-  const sendMessage = () => {
+  const handleSendMessage = async () => {
     const message = input.trim();
     if (!message) return;
 
     addToHistory(message);
-    commandProcessor.process(message);
+    await commandProcessor.process(message);
     handleInputChange({
       target: { value: "" },
     } as React.ChangeEvent<HTMLInputElement>);
   };
 
-  const speechState = {
-    isListening,
-    isRecording,
-    isSpeaking,
-    isTTSEnabled,
-    isSpacebarPressed,
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleSendMessage();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const historyValue = navigateHistory("up");
+      if (historyValue !== null) {
+        handleInputChange({
+          target: { value: historyValue },
+        } as React.ChangeEvent<HTMLInputElement>);
+      }
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const historyValue = navigateHistory("down");
+      if (historyValue !== null) {
+        handleInputChange({
+          target: { value: historyValue },
+        } as React.ChangeEvent<HTMLInputElement>);
+      }
+    }
+  };
+
+  const toggleListening = () => {
+    if (isRecording) {
+      stopWhisperRecording();
+    } else {
+      startWhisperRecording();
+    }
   };
 
   return (
-    <div className="min-h-screen bg-black text-green-400 font-mono overflow-hidden relative">
-      <div className="container mx-auto px-4 py-2 max-w-4xl h-screen flex flex-col">
-        <TerminalHeader
-          status={status}
-          speechState={speechState}
-          commandHistoryLength={commandHistory.length}
-          isLoading={isLoading}
-          onToggleTTS={toggleTTS}
-        />
+    <div className="max-h-screen bg-black text-green-400 flex flex-col items-center justify-center p-14 relative overflow-hidden font-mono">
+      {/* Terminal Scanlines Effect */}
+      <div className="absolute inset-0 bg-[linear-gradient(transparent_50%,rgba(0,255,0,0.03)_50%)] bg-[length:100%_4px] pointer-events-none"></div>
 
-        <div className="flex-1 overflow-hidden relative">
-          <TerminalOutput
-            messages={messages}
-            aiMessages={aiMessages as AIMessage[]}
-            isLoading={isLoading}
-            speechState={speechState}
-            status={status}
-          />
+      {/* CRT Glow Effect */}
+      <div className="absolute inset-0 bg-gradient-radial from-transparent via-transparent to-black/20 pointer-events-none"></div>
+
+      {/* Main Container */}
+      <div className="w-full max-w-6xl mx-auto flex flex-col h-screen relative z-10 border border-green-500/30 bg-black/80 backdrop-blur-sm">
+        {/* Terminal Header */}
+        <div className="border-b border-green-500/30 p-4 flex items-center justify-between bg-green-500/5">
+          <div className="flex items-center space-x-3">
+            <Terminal className="h-5 w-5 text-green-400" />
+            <span className="text-green-400 font-bold">JARVIS TERMINAL</span>
+            <span className="text-green-300/60 text-sm">v1.1.2</span>
+            <span className="text-green-300/60 text-sm hidden md:block">
+              | {status.text}
+            </span>
+          </div>
+          <div className="flex items-center space-x-4 text-sm">
+            <span className="text-green-300/60">
+              {currentTime.toLocaleTimeString()}
+            </span>
+            <div className="flex items-center space-x-1">
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+              <span className="text-green-400 text-xs">ONLINE</span>
+            </div>
+          </div>
         </div>
 
-        <div className="sticky bottom-0 bg-black py-4 border-t border-gray-800 mt-2">
-          <CommandInput
-            input={input}
-            historyIndex={historyIndex}
-            commandHistoryLength={commandHistory.length}
-            isLoading={isLoading}
-            onInputChange={handleInputChange}
-            onSendMessage={sendMessage}
-          />
+        <div className="flex flex-1 overflow-hidden">
+          {/* Left Panel - Terminal */}
+          <div className="flex-1 flex flex-col">
+            <MessageList
+              messages={messages}
+              aiMessages={aiMessages}
+              isLoading={isLoading}
+            />
+            <InputArea
+              input={input}
+              isRecording={isRecording}
+              isTTSEnabled={isTTSEnabled}
+              onInputChange={handleInputChange}
+              onKeyPress={handleKeyPress}
+              onSendMessage={handleSendMessage}
+              onToggleListening={toggleListening}
+              onToggleTTS={toggleTTS}
+            />
+          </div>
 
-          <TerminalFooter speechState={speechState} />
+          {/* Right Panel - Orb Display */}
+          <StatusOrb
+            status={status}
+            isLoading={isLoading}
+            isRecording={isRecording}
+            isSpeaking={isSpeaking}
+            aiMessages={aiMessages}
+          />
         </div>
       </div>
-
-      <style jsx>{`
-        ::-webkit-scrollbar {
-          width: 8px;
-        }
-        ::-webkit-scrollbar-track {
-          background: #1f2937;
-        }
-        ::-webkit-scrollbar-thumb {
-          background: #22d3ee;
-          border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-          background: #06b6d4;
-        }
-      `}</style>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { openai } from "@ai-sdk/openai";
 import { generateText } from "ai";
 import { z } from "zod";
 import { tool } from "ai";
+import { XMLParser } from "fast-xml-parser";
 import creatorInfo from "../../../creator.json";
 
 interface SearchResult {
@@ -156,7 +157,10 @@ async function getWeather(
   const weatherApiKey = process.env.WEATHERAPI_KEY;
 
   if (!weatherApiKey) {
-    return "Weather service is not configured. Please add WEATHERAPI_KEY to your .env.local file for weather data.";
+    return {
+      error:
+        "Weather service is not configured. Please add WEATHERAPI_KEY to your .env.local file for weather data.",
+    };
   }
 
   let endpoint = "";
@@ -189,13 +193,20 @@ async function getWeather(
   if (!response.ok) {
     const errorText = await response.text();
     console.error(`WeatherAPI error: ${response.status} - ${errorText}`);
-    return "Weather service is temporarily unavailable. Please try again later.";
+    return {
+      error:
+        "Weather service is temporarily unavailable. Please try again later.",
+    };
   }
 
   const weatherData = await response.json();
-  const formattedResponse = formatWeatherResponse(weatherData, type);
 
-  return formattedResponse;
+  // Return both raw data and formatted response for flexibility
+  return {
+    data: weatherData,
+    formatted: formatWeatherResponse(weatherData, type),
+    type,
+  };
 }
 
 export const searchTool = tool({
@@ -209,15 +220,42 @@ export const searchTool = tool({
 });
 
 export const weatherTool = tool({
-  description: "Get the weather for the given location.",
+  description:
+    "Get current weather conditions, forecasts, or weather information for any location. Use this tool for ALL weather-related queries including temperature, conditions, forecasts, and climate data.",
   parameters: z.object({
-    query: z.string().describe("The location to get the weather for."),
+    query: z
+      .string()
+      .describe(
+        "The location to get the weather for (city, region, country, or coordinates)."
+      ),
     type: z
       .enum(["current", "forecast", "astronomy"])
-      .describe("The type of weather report to get."),
+      .describe("The type of weather report to get.")
+      .default("current"),
   }),
   execute: async ({ query, type }) => {
-    return await getWeather(query, type);
+    console.log("=== WEATHER TOOL EXECUTION ===");
+    console.log("Query:", query);
+    console.log("Type:", type);
+
+    const result = await getWeather(query, type);
+    console.log("Weather result:", result);
+
+    // If there's an error, return the formatted text
+    if (result.error) {
+      console.log("Weather error:", result.error);
+      return result.error;
+    }
+
+    // Return both the data and formatted text for flexibility
+    const response = {
+      data: result.data,
+      formatted: result.formatted,
+      type: result.type,
+    };
+
+    console.log("Weather tool response:", response);
+    return response;
   },
 });
 
@@ -229,12 +267,135 @@ export const getCreatorInfo = tool({
   },
 });
 
-export const toggleTTS = tool({
-  description: "Toggle the TTS on or off.",
+interface ArXivAuthor {
+  name?: string;
+}
+
+interface ArXivLink {
+  "@_title"?: string;
+  "@_href"?: string;
+}
+
+interface ArXivEntry {
+  title?: string;
+  author?: ArXivAuthor | ArXivAuthor[];
+  summary?: string;
+  published?: string;
+  link?: ArXivLink | ArXivLink[];
+}
+
+interface ArXivFeed {
+  entry?: ArXivEntry | ArXivEntry[];
+  "opensearch:totalResults"?: string;
+  "opensearch:startIndex"?: string;
+  "opensearch:itemsPerPage"?: string;
+}
+
+interface ArXivResponse {
+  feed: ArXivFeed;
+}
+
+export const arXivTool = tool({
+  description:
+    "Search and retrieve papers from arXiv. Use this tool for finding academic papers, research articles, and preprints from arXiv.org.",
   parameters: z.object({
-    toggle: z.boolean().describe("The toggle to set the TTS on or off."),
+    query: z
+      .string()
+      .describe(
+        "The search query. Can include author names, titles, abstracts, etc."
+      ),
+    type: z
+      .enum(["search", "id"])
+      .describe("Whether to search papers or get a specific paper by ID")
+      .default("search"),
+    id: z
+      .string()
+      .optional()
+      .describe("The arXiv ID when retrieving a specific paper"),
+    start: z
+      .number()
+      .optional()
+      .describe("Starting index for search results")
+      .default(0),
+    maxResults: z
+      .number()
+      .optional()
+      .describe("Maximum number of results to return")
+      .default(10),
   }),
-  execute: async ({ toggle }) => {
-    return `TTS is now ${toggle ? "on" : "off"}.`;
+  execute: async ({ query, type, id, start, maxResults }) => {
+    try {
+      const baseUrl = "http://export.arxiv.org/api/query";
+      let url = baseUrl;
+
+      if (type === "search") {
+        const params = new URLSearchParams({
+          search_query: query,
+          start: start.toString(),
+          max_results: maxResults.toString(),
+        });
+        url += "?" + params.toString();
+      } else if (type === "id" && id) {
+        const params = new URLSearchParams({
+          id_list: id,
+        });
+        url += "?" + params.toString();
+      }
+
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error(
+          `arXiv API error: ${response.status} ${response.statusText}`
+        );
+      }
+
+      const data = await response.text();
+
+      // Parse the XML response using fast-xml-parser
+      const parser = new XMLParser({
+        ignoreAttributes: false,
+        attributeNamePrefix: "@_",
+      });
+      const result = parser.parse(data) as ArXivResponse;
+
+      const feed = result.feed;
+      const entries = (
+        Array.isArray(feed.entry) ? feed.entry : [feed.entry]
+      ).filter(
+        (entry): entry is ArXivEntry => entry !== undefined && entry !== null
+      );
+
+      const results = entries.map((entry: ArXivEntry) => ({
+        title: entry.title?.trim() || "",
+        authors: Array.isArray(entry.author)
+          ? entry.author.map((a: ArXivAuthor) => a.name || "")
+          : entry.author?.name
+          ? [entry.author.name]
+          : [],
+        summary: entry.summary?.trim() || "",
+        published: entry.published || "",
+        pdfLink: Array.isArray(entry.link)
+          ? entry.link.find((l: ArXivLink) => l["@_title"] === "pdf")?.[
+              "@_href"
+            ] || ""
+          : entry.link?.["@_title"] === "pdf"
+          ? entry.link["@_href"]
+          : "",
+      }));
+
+      return {
+        totalResults: feed["opensearch:totalResults"] || "0",
+        startIndex: feed["opensearch:startIndex"] || "0",
+        itemsPerPage: feed["opensearch:itemsPerPage"] || "0",
+        results,
+      };
+    } catch (error: unknown) {
+      console.error("arXiv API error:", error);
+      if (error instanceof Error) {
+        throw new Error(`Failed to fetch from arXiv: ${error.message}`);
+      }
+      throw new Error("Failed to fetch from arXiv: An unknown error occurred");
+    }
   },
 });
