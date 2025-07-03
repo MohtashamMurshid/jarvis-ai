@@ -6,12 +6,14 @@ import {
   searchTool,
   weatherTool,
 } from "../../../lib/tools";
-import { verifyAuth, createAuthResponse } from "../../../lib/auth";
 
 export async function POST(request: Request) {
-  // Check authentication
-  if (!verifyAuth(request)) {
-    return createAuthResponse();
+  // Check password authentication
+  const password = request.headers.get("X-Password");
+  const correctPassword = process.env.JARVIS_PASSWORD;
+
+  if (!password || password !== correctPassword) {
+    return Response.json({ error: "Authentication required" }, { status: 401 });
   }
   try {
     const { messages } = await request.json();

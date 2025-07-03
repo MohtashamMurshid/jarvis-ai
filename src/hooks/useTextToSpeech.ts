@@ -2,12 +2,12 @@ import { useRef, useState } from "react";
 
 interface UseTextToSpeechProps {
   onStatusChange: (status: string) => void;
-  authToken?: string | null;
+  password?: string;
 }
 
 export function useTextToSpeech({
   onStatusChange,
-  authToken,
+  password,
 }: UseTextToSpeechProps) {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isTTSEnabled, setIsTTSEnabled] = useState(false);
@@ -49,7 +49,7 @@ export function useTextToSpeech({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(authToken && { Authorization: `Bearer ${authToken}` }),
+          ...(password && { "X-Password": password }),
         },
         body: JSON.stringify({ text: cleanText }),
       });

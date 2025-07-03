@@ -1,14 +1,16 @@
 import OpenAI from "openai";
-import { verifyAuth, createAuthResponse } from "../../../lib/auth";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
 export async function POST(request: Request) {
-  // Check authentication
-  if (!verifyAuth(request)) {
-    return createAuthResponse();
+  // Check password authentication
+  const password = request.headers.get("X-Password");
+  const correctPassword = process.env.JARVIS_PASSWORD;
+
+  if (!password || password !== correctPassword) {
+    return Response.json({ error: "Authentication required" }, { status: 401 });
   }
   try {
     const { text } = await request.json();

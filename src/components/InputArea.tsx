@@ -11,6 +11,7 @@ interface InputAreaProps {
   onSendMessage: () => void;
   onToggleListening: () => void;
   onToggleTTS: () => void;
+  placeholder?: string;
 }
 
 export function InputArea({
@@ -22,6 +23,7 @@ export function InputArea({
   onSendMessage,
   onToggleListening,
   onToggleTTS,
+  placeholder = "Enter command...",
 }: InputAreaProps) {
   return (
     <div className="border-t border-green-500/30 p-4 bg-green-500/5">
@@ -31,7 +33,7 @@ export function InputArea({
           value={input}
           onChange={onInputChange}
           onKeyDown={onKeyPress}
-          placeholder="Enter command..."
+          placeholder={placeholder}
           className="flex-1 bg-transparent border-none text-white placeholder-green-300/50 focus:ring-0 focus:outline-none font-mono"
           style={{ fontFamily: "Courier New, monospace" }}
         />

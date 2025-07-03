@@ -10,11 +10,10 @@ import { CommandProcessor } from "@/lib/commandProcessor";
 import { MessageList } from "@/components/MessageList";
 import { InputArea } from "@/components/InputArea";
 import { StatusOrb } from "@/components/StatusOrb";
-import { PasswordPrompt } from "@/components/PasswordPrompt";
 
 export default function JarvisTerminal() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [password, setPassword] = useState("");
 
   const {
     status,
@@ -37,9 +36,11 @@ export default function JarvisTerminal() {
     setMessages: setAiMessages,
   } = useChat({
     api: "/api/chat",
-    headers: {
-      Authorization: authToken ? `Bearer ${authToken}` : "",
-    },
+    headers: password
+      ? {
+          "X-Password": password,
+        }
+      : {},
     onFinish: (message) => {
       if (
         isTTSEnabled &&
@@ -61,7 +62,7 @@ export default function JarvisTerminal() {
           text,
           type: text.toLowerCase().includes("error") ? "error" : "speaking",
         }),
-      authToken,
+      password: password,
     });
 
   const stopAllActivity = () => {
@@ -112,7 +113,7 @@ export default function JarvisTerminal() {
           text,
           type: text.toLowerCase().includes("error") ? "error" : "processing",
         }),
-      authToken,
+      password: password,
     });
 
   useEffect(() => {
@@ -120,46 +121,50 @@ export default function JarvisTerminal() {
     return () => clearInterval(timer);
   }, [setCurrentTime]);
 
-  // Check for existing authentication token on component mount
   useEffect(() => {
-    const storedToken = localStorage.getItem("jarvis_token");
-    if (storedToken) {
-      // Verify token is still valid (basic check)
-      try {
-        const decoded = Buffer.from(storedToken, "base64").toString();
-        const timestampMatch = decoded.match(/jarvis_session_(\d+)_/);
-
-        if (timestampMatch) {
-          const tokenTime = parseInt(timestampMatch[1]);
-          const now = Date.now();
-          const twentyFourHours = 24 * 60 * 60 * 1000;
-
-          if (now - tokenTime < twentyFourHours) {
-            setAuthToken(storedToken);
-            setIsAuthenticated(true);
-            return;
-          }
-        }
-      } catch {
-        // Token is invalid
-      }
-
-      // Remove invalid token
-      localStorage.removeItem("jarvis_token");
-    }
+    addMessage("🔓 Welcome to JARVIS Terminal.", "jarvis");
+    updateStatus({ type: "ready", text: "READY" });
   }, []);
 
-  const handleAuthenticated = (token: string) => {
-    setAuthToken(token);
-    setIsAuthenticated(true);
-    addMessage("🔓 Access granted. Welcome to JARVIS Terminal.", "jarvis");
-    updateStatus({ type: "ready", text: "AUTHENTICATED" });
+  const checkPassword = (inputPassword: string) => {
+    // Simple password check - you can change this to your desired password
+    const correctPassword = "Mohtasham@11"; // Using the password from your env
+    return inputPassword === correctPassword;
   };
 
   const handleSendMessage = async () => {
     const message = input.trim();
     if (!message) return;
 
+    // If not authenticated, check if this is the password
+    if (!isAuthenticated) {
+      if (checkPassword(message)) {
+        setPassword(message);
+        setIsAuthenticated(true);
+        addMessage(`> ${message.replace(/./g, "*")}`, "user"); // Show asterisks
+        addMessage(
+          "🔓 Authentication successful. JARVIS is now active.",
+          "jarvis"
+        );
+        updateStatus({ type: "ready", text: "AUTHENTICATED" });
+        handleInputChange({
+          target: { value: "" },
+        } as React.ChangeEvent<HTMLInputElement>);
+        return;
+      } else {
+        addMessage(`> ${message.replace(/./g, "*")}`, "user"); // Show asterisks
+        addMessage(
+          "❌ Access denied. Please enter the correct password.",
+          "jarvis"
+        );
+        handleInputChange({
+          target: { value: "" },
+        } as React.ChangeEvent<HTMLInputElement>);
+        return;
+      }
+    }
+
+    // Normal message processing if authenticated
     addToHistory(message);
     await commandProcessor.process(message);
     handleInputChange({
@@ -170,7 +175,7 @@ export default function JarvisTerminal() {
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
       handleSendMessage();
-    } else if (e.key === "ArrowUp") {
+    } else if (e.key === "ArrowUp" && isAuthenticated) {
       e.preventDefault();
       const historyValue = navigateHistory("up");
       if (historyValue !== null) {
@@ -178,7 +183,7 @@ export default function JarvisTerminal() {
           target: { value: historyValue },
         } as React.ChangeEvent<HTMLInputElement>);
       }
-    } else if (e.key === "ArrowDown") {
+    } else if (e.key === "ArrowDown" && isAuthenticated) {
       e.preventDefault();
       const historyValue = navigateHistory("down");
       if (historyValue !== null) {
@@ -190,22 +195,20 @@ export default function JarvisTerminal() {
   };
 
   const toggleListening = () => {
+    if (!isAuthenticated) {
+      addMessage(
+        "❌ Please authenticate first before using voice commands.",
+        "jarvis"
+      );
+      return;
+    }
+
     if (isRecording) {
       stopWhisperRecording();
     } else {
       startWhisperRecording();
     }
   };
-
-  // Show password prompt if not authenticated
-  if (!isAuthenticated) {
-    return (
-      <PasswordPrompt
-        onAuthenticated={handleAuthenticated}
-        currentTime={currentTime}
-      />
-    );
-  }
 
   return (
     <div className="max-h-screen bg-black text-green-400 flex flex-col items-center justify-center p-14 relative overflow-hidden font-mono">
@@ -232,8 +235,18 @@ export default function JarvisTerminal() {
               {currentTime.toLocaleTimeString()}
             </span>
             <div className="flex items-center space-x-1">
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-              <span className="text-green-400 text-xs">ONLINE</span>
+              <div
+                className={`w-2 h-2 ${
+                  isAuthenticated ? "bg-green-400" : "bg-yellow-400"
+                } rounded-full animate-pulse`}
+              ></div>
+              <span
+                className={`${
+                  isAuthenticated ? "text-green-400" : "text-yellow-400"
+                } text-xs`}
+              >
+                {isAuthenticated ? "ONLINE" : "LOCKED"}
+              </span>
             </div>
           </div>
         </div>
@@ -255,6 +268,11 @@ export default function JarvisTerminal() {
               onSendMessage={handleSendMessage}
               onToggleListening={toggleListening}
               onToggleTTS={toggleTTS}
+              placeholder={
+                isAuthenticated
+                  ? "Type your message..."
+                  : "Enter password to access JARVIS..."
+              }
             />
           </div>
 
