@@ -22,7 +22,7 @@ export function useMessages({ append }: UseMessagesProps) {
       setMessages((prev) => [
         ...prev,
         {
-          id: `local-${Date.now()}`,
+          id: `local-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           content,
           sender,
           timestamp: new Date().toLocaleTimeString(),

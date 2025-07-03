@@ -92,7 +92,10 @@ export default function JarvisTerminal() {
         text: "Processing your request",
         toolName: "chat",
       });
-      append({ ...message, id: `local-${Date.now()}` });
+      append({
+        ...message,
+        id: `local-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      });
     },
   });
 

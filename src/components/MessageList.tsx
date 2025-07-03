@@ -38,7 +38,7 @@ export function MessageList({
     >
       <div className="space-y-2">
         {messages.map((message) => (
-          <div key={message.id} className="group">
+          <div key={`local-${message.id}`} className="group">
             {message.sender === "user" ? (
               <div className="flex items-start space-x-2">
                 <span className="text-cyan-400 font-bold">
@@ -57,7 +57,7 @@ export function MessageList({
           </div>
         ))}
         {aiMessages.map((message) => (
-          <div key={message.id} className="group">
+          <div key={`ai-${message.id}`} className="group">
             {message.role === "user" ? (
               <div className="flex items-start space-x-2">
                 <span className="text-cyan-400 font-bold">
